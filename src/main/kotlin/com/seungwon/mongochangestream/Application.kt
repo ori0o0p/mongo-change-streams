@@ -6,8 +6,8 @@ import org.springframework.web.reactive.config.EnableWebFlux
 
 @EnableWebFlux
 @SpringBootApplication
-class MongoChangeStreamApplication
+class Application
 
 fun main(args: Array<String>) {
-    runApplication<MongoChangeStreamApplication>(*args)
+    runApplication<Application>(*args)
 }
