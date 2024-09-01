@@ -36,11 +36,11 @@ internal class ArticleService(
 
     fun subscribe(articleId: String): Flux<StreamDataResponse> {
         return mongoTemplate.changeStream(
-            "articles",
-            ChangeStreamOptions.builder()
-                .fullDocumentLookup(FullDocument.UPDATE_LOOKUP)
-                .build(),
-            Article::class.java)
+                "articles",
+                ChangeStreamOptions.builder()
+                    .fullDocumentLookup(FullDocument.UPDATE_LOOKUP)
+                    .build(),
+                Article::class.java)
             .filter { it.raw?.documentKey?.get("_id")?.asObjectId()?.value?.toString() == (articleId) }
             .map { extractChangedFields(it) }
     }
