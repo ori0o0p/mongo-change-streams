@@ -20,7 +20,6 @@ internal class ArticleService(
 ) {
     fun createNew(title: String, content: String): Mono<Void> {
         val article = Article(
-            id = null,
             title = title,
             content = content
         )

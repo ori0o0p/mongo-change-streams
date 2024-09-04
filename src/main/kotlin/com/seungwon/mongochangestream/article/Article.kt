@@ -8,4 +8,5 @@ internal class Article(
     var title: String,
     var content: String?
 ) {
+    constructor(title: String, content: String): this(null, title, content)
 }
