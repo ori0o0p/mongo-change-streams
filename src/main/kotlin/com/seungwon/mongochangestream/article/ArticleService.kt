@@ -3,9 +3,12 @@ package com.seungwon.mongochangestream.article
 import com.mongodb.client.model.changestream.FullDocument
 import com.mongodb.client.model.changestream.OperationType
 import com.seungwon.mongochangestream.StreamDataResponse
+import org.bson.types.ObjectId
 import org.springframework.data.mongodb.core.ChangeStreamEvent
 import org.springframework.data.mongodb.core.ChangeStreamOptions
 import org.springframework.data.mongodb.core.ReactiveMongoTemplate
+import org.springframework.data.mongodb.core.aggregation.Aggregation
+import org.springframework.data.mongodb.core.query.Criteria
 import org.springframework.stereotype.Service
 import reactor.core.publisher.Flux
 import reactor.core.publisher.Mono
@@ -30,6 +33,7 @@ internal class ArticleService(
         repository.findById(articleId)
             .doOnNext {
                 it.title = title;
+                it.content = content;
             }
             .flatMap { repository.save(it) }
             .then()
@@ -38,22 +42,31 @@ internal class ArticleService(
         return mongoTemplate.changeStream(
                 "articles",
                 ChangeStreamOptions.builder()
-                    .fullDocumentLookup(FullDocument.UPDATE_LOOKUP)
+                    .filter(Aggregation.newAggregation(
+                        Aggregation.match(
+                            Criteria.where("operationType").`is`(OperationType.REPLACE.value)
+                                .orOperator(
+                                    listOf(
+                                        Criteria.where("fullDocument._id").`is`(articleId),
+                                        Criteria.where("documentKey._id").`is`(ObjectId(articleId))
+                                    )
+                                )
+                        )
+                    ))
+                    .fullDocumentLookup(FullDocument.DEFAULT)
                     .build(),
                 Article::class.java)
-            .filter { it.raw?.documentKey?.get("_id")?.asObjectId()?.value?.toString() == (articleId) }
             .map { extractChangedFields(it) }
     }
 
     private fun extractChangedFields(event: ChangeStreamEvent<Article>): StreamDataResponse {
         val document = event.raw
-        val operationType = document?.operationType ?: OperationType.UPDATE
+        val operationType = document?.operationType ?: OperationType.REPLACE
 
         return StreamDataResponse(
             operationType = operationType.value,
             fullDocument = when (operationType) {
-                OperationType.UPDATE, OperationType.REPLACE -> event.body
-                OperationType.DELETE -> null
+                OperationType.REPLACE -> event.body
                 else -> null
             }
         )
