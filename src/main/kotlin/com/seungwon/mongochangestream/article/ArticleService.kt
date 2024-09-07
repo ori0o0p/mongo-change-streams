@@ -1,13 +1,9 @@
 package com.seungwon.mongochangestream.article
 
-import com.mongodb.client.model.changestream.FullDocument
 import com.mongodb.client.model.changestream.OperationType
-import com.seungwon.mongochangestream.StreamDataResponse
+import com.seungwon.mongochangestream.mongo.ChangeStreamBuilder
 import org.bson.types.ObjectId
-import org.springframework.data.mongodb.core.ChangeStreamEvent
-import org.springframework.data.mongodb.core.ChangeStreamOptions
 import org.springframework.data.mongodb.core.ReactiveMongoTemplate
-import org.springframework.data.mongodb.core.aggregation.Aggregation
 import org.springframework.data.mongodb.core.query.Criteria
 import org.springframework.stereotype.Service
 import reactor.core.publisher.Flux
@@ -37,37 +33,19 @@ internal class ArticleService(
             .flatMap { repository.save(it) }
             .then()
 
-    fun subscribe(articleId: String): Flux<StreamDataResponse> {
-        return mongoTemplate.changeStream(
-                "articles",
-                ChangeStreamOptions.builder()
-                    .filter(Aggregation.newAggregation(
-                        Aggregation.match(
-                            Criteria.where("operationType").`is`(OperationType.REPLACE.value)
-                                .orOperator(
-                                    listOf(
-                                        Criteria.where("fullDocument._id").`is`(articleId),
-                                        Criteria.where("documentKey._id").`is`(ObjectId(articleId))
-                                    )
-                                )
-                        )
-                    ))
-                    .fullDocumentLookup(FullDocument.DEFAULT)
-                    .build(),
-                Article::class.java)
-            .map { extractChangedFields(it) }
+    fun subscribe(articleId: String): Flux<Article> {
+        return mongoTemplate.changeStream {
+            collectionName("articles")
+            operationType(OperationType.REPLACE)
+            filterBy(Criteria.where("fullDocument._id").`is`(articleId))
+            filterBy(Criteria.where("documentKey._id").`is`(ObjectId(articleId)))
+        }
     }
+}
 
-    private fun extractChangedFields(event: ChangeStreamEvent<Article>): StreamDataResponse {
-        val document = event.raw
-        val operationType = document?.operationType ?: OperationType.REPLACE
+fun ReactiveMongoTemplate.changeStream(init: ChangeStreamBuilder.() -> Unit): Flux<Article> {
+    val builder = ChangeStreamBuilder().apply(init)
 
-        return StreamDataResponse(
-            operationType = operationType.value,
-            fullDocument = when (operationType) {
-                OperationType.REPLACE -> event.body
-                else -> null
-            }
-        )
-    }
+    return changeStream(builder.getCollectionName(), builder.build(), Article::class.java)
+        .mapNotNull { it.body }
 }
